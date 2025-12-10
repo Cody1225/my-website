@@ -211,7 +211,7 @@
 <script>
     const { createApp, ref, onMounted, nextTick } = Vue;
 
-    // --- 輔助函式：顏色轉換 ---
+    // --- 輔助函式：顏色轉換 (未變動) ---
     function hexToRgb(hex) {
         // 移除 # 符號
         const bigint = parseInt(hex, 16);
@@ -221,7 +221,7 @@
         return [r, g, b];
     }
     
-    // --- 輔助函式：預設設定 ---
+    // --- 輔助函式：預設設定 (未變動) ---
     const DEFAULT_CONFIG = {
         id: '',
         label: '新指令',
@@ -247,14 +247,20 @@
             
             const controlPad = ref(null); // 參考控制面板元素
             
-            // 拖曳/縮放狀態
-            let activeDragId = null;
-            let initialX = 0;
-            let initialY = 0;
-            let initialConfig = null;
-            let mode = null; // 'drag' or 'resize'
+            // 拖曳/縮放狀態 (使用 dragContext 替代多個變數)
+            const dragContext = ref({
+                id: null,
+                mode: null, // 'drag' or 'resize'
+                initialConfig: null, // 拖曳開始時的原始配置
+                offsetX: 0, // 滑鼠點擊位置相對於按鈕左上角的 X 偏移
+                offsetY: 0, // 滑鼠點擊位置相對於按鈕左上角的 Y 偏移
+                initialWidth: 0, // 拖曳開始時的寬度
+                initialHeight: 0, // 拖曳開始時的高度
+                initialMouseX: 0, // 拖曳開始時的螢幕 X 座標
+                initialMouseY: 0, // 拖曳開始時的螢幕 Y 座標
+            });
 
-            // --- 資料持久化 ---
+            // --- 資料持久化 (未變動) ---
             const CONFIG_KEY = 'RpiControllerConfigs';
 
             function loadConfigs() {
@@ -291,7 +297,7 @@
                 localStorage.setItem(CONFIG_KEY, JSON.stringify(buttonConfigs.value));
             }
             
-            // --- 樹莓派通訊邏輯 (HTTP) ---
+            // --- 樹莓派通訊邏輯 (HTTP) (未變動) ---
             async function sendMessage(message) {
                 if (isEditing.value) return; // 編輯模式下不發送指令
 
@@ -315,13 +321,14 @@
                 }
             }
             
-            // --- 按鈕操作 ---
+            // --- 按鈕操作 (未變動) ---
 
             function addButton() {
                 const newId = crypto.randomUUID();
                 const newConfig = { 
                     ...DEFAULT_CONFIG, 
                     id: newId, 
+                    // 初始 x/y 設為左上角座標，讓按鈕置中
                     x: (controlPad.value.clientWidth / 2) - (DEFAULT_CONFIG.width / 2),
                     y: (controlPad.value.clientHeight / 2) - (DEFAULT_CONFIG.height / 2),
                 };
@@ -355,7 +362,7 @@
             }
 
 
-            // --- 拖曳/縮放邏輯 ---
+            // --- 拖曳/縮放邏輯 (已修復) ---
             function getConfig(id) {
                 return buttonConfigs.value.find(c => c.id === id);
             }
@@ -368,83 +375,118 @@
             }
 
             function startDrag(event, id) {
-                if (!isEditing.value || mode === 'resize') return;
+                if (!isEditing.value) return; 
                 
-                // 阻止瀏覽器處理 (防止手機上滾動)
-                event.preventDefault(); 
-                
-                mode = 'drag';
-                activeDragId = id;
-                initialConfig = getConfig(id);
+                const config = getConfig(id);
+                if (!config) return;
+
+                event.preventDefault(); // 阻止瀏覽器處理 (防止手機上滾動)
                 
                 const coords = getEventCoords(event);
-                initialX = coords.x;
-                initialY = coords.y;
+                const buttonElement = document.getElementById(id);
+                const buttonRect = buttonElement.getBoundingClientRect(); // 取得按鈕在螢幕上的位置
+
+                // 儲存拖曳狀態，特別是點擊偏移量
+                dragContext.value = {
+                    id: id,
+                    mode: 'drag',
+                    initialConfig: JSON.parse(JSON.stringify(config)), // 深拷貝，用於計算起始位置
+                    offsetX: coords.x - buttonRect.left, // 滑鼠點擊點相對於按鈕左上角的 X 偏移
+                    offsetY: coords.y - buttonRect.top,  // 滑鼠點擊點相對於按鈕左上角的 Y 偏移
+                    initialWidth: config.width,
+                    initialHeight: config.height,
+                    initialMouseX: coords.x, // 拖曳開始時的螢幕 X 座標
+                    initialMouseY: coords.y, // 拖曳開始時的螢幕 Y 座標
+                };
                 
                 document.addEventListener('mousemove', handleMove);
                 document.addEventListener('mouseup', handleEnd);
-                document.addEventListener('touchmove', handleMove);
+                document.addEventListener('touchmove', handleMove, { passive: false }); // 啟用 touchmove 阻止預設滾動
                 document.addEventListener('touchend', handleEnd);
             }
 
             function startResize(event, id) {
-                if (!isEditing.value || mode === 'drag') return;
+                if (!isEditing.value) return;
+
+                const config = getConfig(id);
+                if (!config) return;
                 
-                // 阻止瀏覽器處理 (防止手機上滾動)
                 event.preventDefault(); 
                 event.stopPropagation(); // 阻止事件冒泡到 drag 邏輯
                 
-                mode = 'resize';
-                activeDragId = id;
-                initialConfig = getConfig(id);
-                
                 const coords = getEventCoords(event);
-                initialX = coords.x;
-                initialY = coords.y;
-                
+
+                // 儲存縮放狀態
+                dragContext.value = {
+                    id: id,
+                    mode: 'resize',
+                    initialConfig: JSON.parse(JSON.stringify(config)),
+                    offsetX: 0, 
+                    offsetY: 0, 
+                    initialWidth: config.width,
+                    initialHeight: config.height,
+                    initialMouseX: coords.x,
+                    initialMouseY: coords.y,
+                };
+
                 document.addEventListener('mousemove', handleMove);
                 document.addEventListener('mouseup', handleEnd);
-                document.addEventListener('touchmove', handleMove);
+                document.addEventListener('touchmove', handleMove, { passive: false }); // 啟用 touchmove 阻止預設滾動
                 document.addEventListener('touchend', handleEnd);
             }
 
             function handleMove(event) {
-                if (!activeDragId || !initialConfig || !controlPad.value) return;
+                if (!dragContext.value.id) return;
                 
-                const currentConfig = getConfig(activeDragId);
-                if (!currentConfig) return;
+                const { id, mode, initialConfig, offsetX, offsetY, initialWidth, initialHeight, initialMouseX, initialMouseY } = dragContext.value;
+                const currentConfig = getConfig(id);
+                if (!currentConfig || !controlPad.value) return;
 
                 const coords = getEventCoords(event);
-                const deltaX = coords.x - initialX;
-                const deltaY = coords.y - initialY;
+                const deltaX = coords.x - initialMouseX;
+                const deltaY = coords.y - initialMouseY;
                 
                 const containerRect = controlPad.value.getBoundingClientRect();
-
+                
                 if (mode === 'drag') {
-                    // 計算新的中心位置
-                    let newX = initialConfig.x + deltaX;
-                    let newY = initialConfig.y + deltaY;
+                    event.preventDefault(); // 確保移動時不會滾動頁面
+
+                    // 滑鼠點擊位置相對於容器左上角的座標
+                    const mouseXInContainer = coords.x - containerRect.left;
+                    const mouseYInContainer = coords.y - containerRect.top;
+
+                    // 減去偏移量，計算按鈕新的左上角位置
+                    let newX = mouseXInContainer - offsetX;
+                    let newY = mouseYInContainer - offsetY;
+
+                    // --- 邊界限制 (Top-Left Corner Model) ---
+                    // 限制最小值為 0
+                    newX = Math.max(0, newX);
+                    newY = Math.max(0, newY);
                     
-                    // 限制邊界
-                    newX = Math.max(currentConfig.width / 2, Math.min(newX, containerRect.width - currentConfig.width / 2));
-                    newY = Math.max(currentConfig.height / 2, Math.min(newY, containerRect.height - currentConfig.height / 2));
+                    // 限制最大值 (容器寬度 - 按鈕寬度)
+                    newX = Math.min(newX, containerRect.width - currentConfig.width);
+                    newY = Math.min(newY, containerRect.height - currentConfig.height);
 
                     currentConfig.x = newX;
                     currentConfig.y = newY;
                 } else if (mode === 'resize') {
-                    // 計算新的尺寸
-                    let newWidth = initialConfig.width + deltaX;
-                    let newHeight = initialConfig.height + deltaY;
+                    event.preventDefault(); // 確保縮放時不會滾動頁面
                     
-                    // 限制最小尺寸，並限制在容器內
+                    // 計算新的尺寸
+                    let newWidth = initialWidth + deltaX;
+                    let newHeight = initialHeight + deltaY;
+                    
+                    // 限制最小尺寸
                     newWidth = Math.max(80, newWidth);
                     newHeight = Math.max(40, newHeight);
                     
                     // 檢查新的尺寸是否會超出右邊界或下邊界
-                    const currentRight = initialConfig.x + initialConfig.width / 2 + deltaX;
-                    const currentBottom = initialConfig.y + initialConfig.height / 2 + deltaY;
-
-                    if (currentRight < containerRect.width && currentBottom < containerRect.height) {
+                    const currentRight = initialConfig.x + newWidth;
+                    const currentBottom = initialConfig.y + newHeight;
+                    
+                    // 僅在不超出容器邊界時更新尺寸
+                    if (currentRight <= containerRect.width && currentBottom <= containerRect.height) {
                          currentConfig.width = newWidth;
                          currentConfig.height = newHeight;
                     }
@@ -452,20 +494,21 @@
             }
 
             function handleEnd() {
-                if (activeDragId) {
-                    saveConfigs(); // 結束拖曳/縮放時儲存
+                if (dragContext.value.id) {
+                    saveConfigs();
                 }
-                mode = null;
-                activeDragId = null;
-                initialConfig = null;
+                // 重設拖曳狀態
+                dragContext.value.id = null;
+                dragContext.value.mode = null;
+                dragContext.value.initialConfig = null;
                 
                 document.removeEventListener('mousemove', handleMove);
                 document.removeEventListener('mouseup', handleEnd);
-                document.removeEventListener('touchmove', handleMove);
+                document.removeEventListener('touchmove', handleMove, { passive: false });
                 document.removeEventListener('touchend', handleEnd);
             }
 
-            // --- 生命周期鉤子 ---
+            // --- 生命周期鉤子 (未變動) ---
             onMounted(() => {
                 loadConfigs();
                 // 初始化 Lucide Icons

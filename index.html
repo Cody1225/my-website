@@ -12,14 +12,39 @@
     <script src="https://unpkg.com/lucide@latest"></script>
     
     <style>
+        /* 整個 App 的背景：由 JS 依據 dark-mode class 決定顏色 */
+        body {
+            font-family: 'Inter', sans-serif;
+            /* 淺色模式背景 (預設) */
+            background: linear-gradient(135deg, #e0e7ff, #f0f4ff); /* Light blue/gray gradient */
+            color: #1f2937; /* 預設文字顏色 (深色) */
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            transition: background 0.5s ease, color 0.5s ease;
+        }
+        /* 深色模式覆蓋 */
+        body.dark-mode {
+            background: linear-gradient(135deg, #1f2937, #374151); /* 原本的深色漸變 */
+            color: #f3f4f6; /* 預設文字顏色 (淺色) */
+        }
+
         /* 應用 Apple 液態玻璃 (Frosted Glass) 效果 */
         .frosted-glass {
-            background-color: rgba(255, 255, 255, 0.2);
-            /* 核心模糊效果 */
+            /* 淺色模式玻璃效果 */
+            background-color: rgba(255, 255, 255, 0.4);
             backdrop-filter: blur(16px) saturate(180%);
             -webkit-backdrop-filter: blur(16px) saturate(180%);
-            border: 1px solid rgba(255, 255, 255, 0.125);
+            border: 1px solid rgba(255, 255, 255, 0.5);
             box-shadow: 0 4px 30px rgba(0, 0, 0, 0.1);
+            transition: background-color 0.5s ease, border-color 0.5s ease;
+        }
+
+        /* 深色模式玻璃效果覆蓋 */
+        body.dark-mode .frosted-glass {
+            background-color: rgba(0, 0, 0, 0.2);
+            border: 1px solid rgba(255, 255, 255, 0.125);
         }
 
         /* 確保按鈕在拖曳時在頂層 */
@@ -27,16 +52,6 @@
             touch-action: none; /* 禁用瀏覽器預設的觸控行為 */
             position: absolute;
             transition: opacity 0.2s; /* 讓編輯模式切換更平滑 */
-        }
-
-        /* 整個 App 的背景：使用漸層營造質感 */
-        body {
-            font-family: 'Inter', sans-serif;
-            background: linear-gradient(135deg, #1f2937, #374151);
-            min-height: 100vh;
-            display: flex;
-            justify-content: center;
-            align-items: center;
         }
 
         /* 確保 App 容器在行動裝置上滿版 */
@@ -56,20 +71,31 @@
         }
     </style>
 </head>
-<body>
+<body> <!-- 移除 Vue class 綁定，改用 JS 控制 -->
 
 <div id="app">
+    <!-- 外層容器根據深色模式切換標題/底部文字顏色 -->
     <div class="frosted-glass p-4 h-full flex flex-col">
         <!-- 標題列 (Header) -->
-        <header class="flex justify-between items-center pb-4 text-white">
+        <header class="flex justify-between items-center pb-4" :class="isDarkMode ? 'text-white' : 'text-gray-900'">
             <h1 class="text-xl font-bold">
                 Wi-Fi 控制台
                 <span :class="{'text-green-400': isConnected, 'text-red-400': !isConnected}" class="text-sm font-normal ml-2">
                     ({{ isConnected ? '連線中' : '未連線' }})
                 </span>
             </h1>
+            
             <div class="flex space-x-2">
-                <!-- 編輯/完成按鈕 -->
+                <!-- 1. 深色/淺色模式切換按鈕 -->
+                <button 
+                    @click="toggleDarkMode"
+                    :class="isDarkMode ? 'bg-gray-700 text-yellow-400' : 'bg-gray-200 text-gray-800'"
+                    class="frosted-glass p-2 rounded-full transition duration-300 hover:scale-105"
+                >
+                    <i :data-lucide="isDarkMode ? 'moon' : 'sun'" class="icon w-5 h-5"></i>
+                </button>
+                
+                <!-- 2. 編輯/完成按鈕 -->
                 <button 
                     @click="isEditing = !isEditing"
                     :class="isEditing ? 'bg-orange-500' : 'bg-blue-500'"
@@ -77,11 +103,13 @@
                 >
                     {{ isEditing ? '完成' : '編輯' }}
                 </button>
-                <!-- 新增按鈕 -->
+                
+                <!-- 3. 新增按鈕 (已修正: 確保 + 符號可見) -->
                 <button v-if="isEditing" 
                     @click="addButton"
-                    class="frosted-glass p-2 bg-green-500 text-white rounded-full hover:scale-105 transition duration-300"
+                    class="frosted-glass p-2 bg-green-500 text-white rounded-full hover:scale-110 transition duration-300 flex items-center justify-center"
                 >
+                    <!-- Lucide Icons 渲染後會替換這個 <i> 標籤 -->
                     <i data-lucide="plus" class="icon w-5 h-5"></i>
                 </button>
             </div>
@@ -90,7 +118,8 @@
         <!-- 控制面板 (Control Pad) -->
         <div 
             ref="controlPad" 
-            class="flex-1 relative rounded-xl overflow-hidden shadow-2xl bg-gray-900/10 border border-gray-700/50"
+            class="flex-1 relative rounded-xl overflow-hidden shadow-2xl"
+            :class="isDarkMode ? 'bg-black/20 border border-gray-700/50' : 'bg-gray-900/10 border border-gray-400/50'"
         >
             <div v-if="buttonConfigs.length === 0" class="flex items-center justify-center h-full text-gray-400">
                 <p>點擊右上角 '+' 新增您的第一個控制按鈕</p>
@@ -151,7 +180,7 @@
         </div>
         
         <!-- 底部資訊/設定按鈕 -->
-        <footer class="pt-4 flex justify-between items-center text-white/70">
+        <footer class="pt-4 flex justify-between items-center" :class="isDarkMode ? 'text-white/70' : 'text-gray-600'">
             <span class="text-sm">樹莓派 IP: {{ rpiIp }}</span>
             <button class="text-sm frosted-glass px-3 py-1 rounded-full bg-gray-700/50 hover:bg-gray-600/50 transition">
                 設定
@@ -162,14 +191,14 @@
     <!-- 編輯器彈窗 (Modal) -->
     <div v-if="editingConfig" class="fixed inset-0 bg-black/50 z-20 flex items-center justify-center p-4">
         <div class="frosted-glass p-6 rounded-3xl w-full max-w-sm border border-gray-400/50 shadow-2xl">
-            <h2 class="text-xl font-bold text-white mb-4">編輯按鈕</h2>
+            <h2 class="text-xl font-bold" :class="isDarkMode ? 'text-white' : 'text-gray-900'">編輯按鈕</h2>
             
             <!-- 內容編輯 -->
             <div class="space-y-4">
-                <label class="block text-white/80">按鈕文字</label>
+                <label class="block" :class="isDarkMode ? 'text-white/80' : 'text-gray-600'">按鈕文字</label>
                 <input type="text" v-model="editingConfig.label" class="w-full p-2 rounded-lg bg-white/10 border border-white/20 text-white focus:ring-blue-500 focus:border-blue-500" />
                 
-                <label class="block text-white/80">發送指令</label>
+                <label class="block" :class="isDarkMode ? 'text-white/80' : 'text-gray-600'">發送指令</label>
                 <input type="text" v-model="editingConfig.messageToSend" class="w-full p-2 rounded-lg bg-white/10 border border-white/20 text-white focus:ring-blue-500 focus:border-blue-500" />
             </div>
 
@@ -177,13 +206,13 @@
 
             <!-- 樣式編輯 -->
             <div class="space-y-4">
-                <label class="block text-white/80">按鈕背景顏色</label>
+                <label class="block" :class="isDarkMode ? 'text-white/80' : 'text-gray-600'">按鈕背景顏色</label>
                 <input type="color" :value="'#' + editingConfig.colorHex" @input="event => editingConfig.colorHex = event.target.value.substring(1).toUpperCase()" class="w-full h-10 cursor-pointer" />
                 
-                <label class="block text-white/80">文字顏色</label>
+                <label class="block" :class="isDarkMode ? 'text-white/80' : 'text-gray-600'">文字顏色</label>
                 <input type="color" :value="'#' + editingConfig.fontColorHex" @input="event => editingConfig.fontColorHex = event.target.value.substring(1).toUpperCase()" class="w-full h-10 cursor-pointer" />
 
-                <label class="block text-white/80">字體大小: {{ Math.round(editingConfig.fontSize) }} px</label>
+                <label class="block" :class="isDarkMode ? 'text-white/80' : 'text-gray-600'">字體大小: {{ Math.round(editingConfig.fontSize) }} px</label>
                 <input type="range" min="10" max="40" step="1" v-model.number="editingConfig.fontSize" class="w-full h-2 bg-white/20 rounded-lg appearance-none cursor-pointer range-lg" />
             </div>
             
@@ -209,24 +238,14 @@
 </div>
 
 <script>
-    const { createApp, ref, onMounted, nextTick } = Vue;
+    const { createApp, ref, onMounted, nextTick, watch } = Vue; 
 
-    // --- 輔助函式：顏色轉換 (未變動) ---
-    function hexToRgb(hex) {
-        // 移除 # 符號
-        const bigint = parseInt(hex, 16);
-        const r = (bigint >> 16) & 255;
-        const g = (bigint >> 8) & 255;
-        const b = bigint & 255;
-        return [r, g, b];
-    }
-    
-    // --- 輔助函式：預設設定 (未變動) ---
+    // --- 輔助函式：預設設定 ---
     const DEFAULT_CONFIG = {
         id: '',
         label: '新指令',
         messageToSend: 'NEW',
-        colorHex: '7E57C2', // Deep Purple
+        colorHex: '7E57C2', // Deep Purple (將被 addButton 中的隨機色覆蓋)
         x: 100, 
         y: 100,
         width: 120, 
@@ -234,6 +253,105 @@
         fontSize: 20,
         fontColorHex: 'FFFFFF'
     };
+    
+    // --- 顏色調色盤 ---
+    const COLOR_PALETTE = [
+        '007AFF', // Blue
+        'FF3B30', // Red
+        '34C759', // Green
+        'FF9500', // Orange
+        '5856D6', // Indigo
+        'AF52DE', // Purple
+        'FFCC00', // Yellow
+        '3A3A3C', // Gray/Black (for dark mode contrast)
+        '64D2FF'  // Cyan
+    ];
+
+    function getRandomColor() {
+        const index = Math.floor(Math.random() * COLOR_PALETTE.length);
+        return COLOR_PALETTE[index];
+    }
+
+    // --- AABB 碰撞檢測函式 ---
+    function checkCollision(rect1, rect2) {
+        // rect = { x, y, width, height }
+        return (
+            rect1.x < rect2.x + rect2.width &&
+            rect1.x + rect1.width > rect2.x &&
+            rect1.y < rect2.y + rect2.height &&
+            rect1.y + rect1.height > rect2.y
+        );
+    }
+    
+    // --- 尋找空位函式 (用於避免按鈕重疊) ---
+    function findEmptyPosition(initialX, initialY, width, height, existingConfigs, containerWidth, containerHeight) {
+        let newX = initialX;
+        let newY = initialY;
+        const maxAttempts = 100;
+        const step = 20; // 每次嘗試移動的距離
+        let attempts = 0;
+
+        const isColliding = (x, y) => {
+            const proposedRect = { x, y, width, height };
+            // 檢查是否超出容器邊界
+            if (x < 0 || y < 0 || x + width > containerWidth || y + height > containerHeight) {
+                return true;
+            }
+            // 檢查是否與現有按鈕碰撞
+            for (const config of existingConfigs) {
+                const otherRect = { x: config.x, y: config.y, width: config.width, height: config.height };
+                if (checkCollision(proposedRect, otherRect)) {
+                    return true;
+                }
+            }
+            return false;
+        };
+        
+        // 檢查初始位置
+        if (!isColliding(newX, newY)) {
+            return { x: newX, y: newY };
+        }
+
+        // 螺旋式搜尋空位 (檢查中心點周圍的八個方向，並逐漸擴大半徑)
+        for (let i = 1; attempts < maxAttempts; i++) {
+            attempts++;
+            // 每次擴大步長
+            const currentStep = Math.ceil(i / 8) * step; 
+            const direction = i % 8; // 0 to 7
+
+            let dx = 0;
+            let dy = 0;
+
+            // 定義八個方向
+            switch(direction) {
+                case 0: dx = currentStep; dy = 0; break; // 右
+                case 1: dx = currentStep; dy = currentStep; break; // 右下
+                case 2: dx = 0; dy = currentStep; break; // 下
+                case 3: dx = -currentStep; dy = currentStep; break; // 左下
+                case 4: dx = -currentStep; dy = 0; break; // 左
+                case 5: dx = -currentStep; dy = -currentStep; break; // 左上
+                case 6: dx = 0; dy = -currentStep; break; // 上
+                case 7: dx = currentStep; dy = -currentStep; break; // 右上
+            }
+
+            // 調整到新的嘗試位置 (以中心為基準點)
+            newX = initialX + dx;
+            newY = initialY + dy;
+
+            // 確保位置在容器內
+            newX = Math.max(0, Math.min(newX, containerWidth - width));
+            newY = Math.max(0, Math.min(newY, containerHeight - height));
+
+            if (!isColliding(newX, newY)) {
+                // 找到空位
+                return { x: newX, y: newY };
+            }
+        }
+        
+        // 達到最大嘗試次數，退回初始中心位置 (會重疊，但可避免無限循環)
+        return { x: initialX, y: initialY };
+    }
+
 
     // --- Vue 應用程式邏輯 ---
     const App = {
@@ -244,24 +362,26 @@
             const editingConfig = ref(null); // 當前正在編輯的按鈕
             const rpiIp = ref('192.168.1.100'); // 樹莓派 IP (請替換為您的實際 IP)
             const isConnected = ref(false); // 模擬連線狀態
+            const isDarkMode = ref(false); // 深色模式狀態
             
             const controlPad = ref(null); // 參考控制面板元素
             
-            // 拖曳/縮放狀態 (使用 dragContext 替代多個變數)
+            // 拖曳/縮放狀態
             const dragContext = ref({
                 id: null,
                 mode: null, // 'drag' or 'resize'
-                initialConfig: null, // 拖曳開始時的原始配置
-                offsetX: 0, // 滑鼠點擊位置相對於按鈕左上角的 X 偏移
-                offsetY: 0, // 滑鼠點擊位置相對於按鈕左上角的 Y 偏移
-                initialWidth: 0, // 拖曳開始時的寬度
-                initialHeight: 0, // 拖曳開始時的高度
-                initialMouseX: 0, // 拖曳開始時的螢幕 X 座標
-                initialMouseY: 0, // 拖曳開始時的螢幕 Y 座標
+                initialConfig: null, 
+                offsetX: 0, 
+                offsetY: 0, 
+                initialWidth: 0, 
+                initialHeight: 0, 
+                initialMouseX: 0, 
+                initialMouseY: 0, 
             });
 
             // --- 資料持久化 (未變動) ---
             const CONFIG_KEY = 'RpiControllerConfigs';
+            const DARK_MODE_KEY = 'DarkModePreference'; 
 
             function loadConfigs() {
                 const saved = localStorage.getItem(CONFIG_KEY);
@@ -291,17 +411,29 @@
                     fontSize: config.fontSize || DEFAULT_CONFIG.fontSize,
                     fontColorHex: config.fontColorHex || DEFAULT_CONFIG.fontColorHex
                 }));
+                
+                // 載入深色模式偏好
+                const savedDarkMode = localStorage.getItem(DARK_MODE_KEY);
+                if (savedDarkMode !== null) {
+                    isDarkMode.value = savedDarkMode === 'true';
+                }
             }
 
             function saveConfigs() {
                 localStorage.setItem(CONFIG_KEY, JSON.stringify(buttonConfigs.value));
             }
             
+            // --- 深色模式切換邏輯 (未變動) ---
+            function toggleDarkMode() {
+                isDarkMode.value = !isDarkMode.value;
+                localStorage.setItem(DARK_MODE_KEY, isDarkMode.value);
+            }
+
             // --- 樹莓派通訊邏輯 (HTTP) (未變動) ---
             async function sendMessage(message) {
-                if (isEditing.value) return; // 編輯模式下不發送指令
+                if (isEditing.value) return; 
 
-                const url = `http://${rpiIp.value}:5000/command`; // 假設樹莓派在 5000 port 運行 Flask 服務
+                const url = `http://${rpiIp.value}:5000/command`; 
 
                 try {
                     const response = await fetch(url, {
@@ -317,23 +449,44 @@
                     }
                 } catch (error) {
                     console.error(`無法連線到 RPI (${rpiIp.value})，請檢查網路設定:`, error);
-                    // 實際應用中可以在這裡顯示錯誤訊息給用戶
                 }
             }
             
-            // --- 按鈕操作 (未變動) ---
-
+            // --- 按鈕操作 (已修復: 避免重疊與隨機顏色) ---
             function addButton() {
                 const newId = crypto.randomUUID();
+                
+                // 1. 計算初始中心位置
+                const initialCenterX = (controlPad.value.clientWidth / 2) - (DEFAULT_CONFIG.width / 2);
+                const initialCenterY = (controlPad.value.clientHeight / 2) - (DEFAULT_CONFIG.height / 2);
+
+                // 2. 尋找沒有碰撞的位置
+                const { x: newX, y: newY } = findEmptyPosition(
+                    initialCenterX,
+                    initialCenterY,
+                    DEFAULT_CONFIG.width,
+                    DEFAULT_CONFIG.height,
+                    buttonConfigs.value,
+                    controlPad.value.clientWidth,
+                    controlPad.value.clientHeight
+                );
+
+
                 const newConfig = { 
                     ...DEFAULT_CONFIG, 
                     id: newId, 
-                    // 初始 x/y 設為左上角座標，讓按鈕置中
-                    x: (controlPad.value.clientWidth / 2) - (DEFAULT_CONFIG.width / 2),
-                    y: (controlPad.value.clientHeight / 2) - (DEFAULT_CONFIG.height / 2),
+                    colorHex: getRandomColor(), // 設置隨機顏色
+                    x: newX, // 使用找到的 X 座標
+                    y: newY, // 使用找到的 Y 座標
                 };
+                
                 buttonConfigs.value.push(newConfig);
                 saveConfigs();
+                
+                // 確保新按鈕的 DOM 元素被渲染後，立即初始化 Lucide Icons
+                nextTick(() => {
+                    lucide.createIcons();
+                });
             }
 
             function removeButton(idToRemove) {
@@ -362,7 +515,7 @@
             }
 
 
-            // --- 拖曳/縮放邏輯 (已修復) ---
+            // --- 拖曳/縮放邏輯 (未變動) ---
             function getConfig(id) {
                 return buttonConfigs.value.find(c => c.id === id);
             }
@@ -380,28 +533,28 @@
                 const config = getConfig(id);
                 if (!config) return;
 
-                event.preventDefault(); // 阻止瀏覽器處理 (防止手機上滾動)
+                event.preventDefault(); 
                 
                 const coords = getEventCoords(event);
                 const buttonElement = document.getElementById(id);
-                const buttonRect = buttonElement.getBoundingClientRect(); // 取得按鈕在螢幕上的位置
+                const buttonRect = buttonElement.getBoundingClientRect(); 
 
                 // 儲存拖曳狀態，特別是點擊偏移量
                 dragContext.value = {
                     id: id,
                     mode: 'drag',
-                    initialConfig: JSON.parse(JSON.stringify(config)), // 深拷貝，用於計算起始位置
+                    initialConfig: JSON.parse(JSON.stringify(config)), 
                     offsetX: coords.x - buttonRect.left, // 滑鼠點擊點相對於按鈕左上角的 X 偏移
                     offsetY: coords.y - buttonRect.top,  // 滑鼠點擊點相對於按鈕左上角的 Y 偏移
                     initialWidth: config.width,
                     initialHeight: config.height,
-                    initialMouseX: coords.x, // 拖曳開始時的螢幕 X 座標
-                    initialMouseY: coords.y, // 拖曳開始時的螢幕 Y 座標
+                    initialMouseX: coords.x, 
+                    initialMouseY: coords.y, 
                 };
                 
                 document.addEventListener('mousemove', handleMove);
                 document.addEventListener('mouseup', handleEnd);
-                document.addEventListener('touchmove', handleMove, { passive: false }); // 啟用 touchmove 阻止預設滾動
+                document.addEventListener('touchmove', handleMove, { passive: false }); 
                 document.addEventListener('touchend', handleEnd);
             }
 
@@ -412,7 +565,7 @@
                 if (!config) return;
                 
                 event.preventDefault(); 
-                event.stopPropagation(); // 阻止事件冒泡到 drag 邏輯
+                event.stopPropagation(); 
                 
                 const coords = getEventCoords(event);
 
@@ -431,7 +584,7 @@
 
                 document.addEventListener('mousemove', handleMove);
                 document.addEventListener('mouseup', handleEnd);
-                document.addEventListener('touchmove', handleMove, { passive: false }); // 啟用 touchmove 阻止預設滾動
+                document.addEventListener('touchmove', handleMove, { passive: false }); 
                 document.addEventListener('touchend', handleEnd);
             }
 
@@ -449,31 +602,56 @@
                 const containerRect = controlPad.value.getBoundingClientRect();
                 
                 if (mode === 'drag') {
-                    event.preventDefault(); // 確保移動時不會滾動頁面
+                    event.preventDefault(); 
 
-                    // 滑鼠點擊位置相對於容器左上角的座標
                     const mouseXInContainer = coords.x - containerRect.left;
                     const mouseYInContainer = coords.y - containerRect.top;
 
-                    // 減去偏移量，計算按鈕新的左上角位置
+                    // 計算新的未經限制的位置
                     let newX = mouseXInContainer - offsetX;
                     let newY = mouseYInContainer - offsetY;
 
-                    // --- 邊界限制 (Top-Left Corner Model) ---
-                    // 限制最小值為 0
+                    // --- 1. 邊界限制 (防止超出容器) ---
                     newX = Math.max(0, newX);
                     newY = Math.max(0, newY);
                     
-                    // 限制最大值 (容器寬度 - 按鈕寬度)
                     newX = Math.min(newX, containerRect.width - currentConfig.width);
                     newY = Math.min(newY, containerRect.height - currentConfig.height);
 
-                    currentConfig.x = newX;
-                    currentConfig.y = newY;
+                    // --- 2. 碰撞檢測 (防止重疊) ---
+                    const proposedRect = {
+                        x: newX,
+                        y: newY,
+                        width: currentConfig.width,
+                        height: currentConfig.height
+                    };
+
+                    let collisionDetected = false;
+                    for (const otherConfig of buttonConfigs.value) {
+                        if (otherConfig.id === id) continue; // 忽略自身
+
+                        const otherRect = {
+                            x: otherConfig.x,
+                            y: otherConfig.y,
+                            width: otherConfig.width,
+                            height: otherConfig.height
+                        };
+
+                        if (checkCollision(proposedRect, otherRect)) {
+                            collisionDetected = true;
+                            break;
+                        }
+                    }
+
+                    // 3. 只有在沒有碰撞的情況下才更新位置
+                    if (!collisionDetected) {
+                        currentConfig.x = newX;
+                        currentConfig.y = newY;
+                    }
+
                 } else if (mode === 'resize') {
-                    event.preventDefault(); // 確保縮放時不會滾動頁面
+                    event.preventDefault(); 
                     
-                    // 計算新的尺寸
                     let newWidth = initialWidth + deltaX;
                     let newHeight = initialHeight + deltaY;
                     
@@ -485,8 +663,35 @@
                     const currentRight = initialConfig.x + newWidth;
                     const currentBottom = initialConfig.y + newHeight;
                     
-                    // 僅在不超出容器邊界時更新尺寸
-                    if (currentRight <= containerRect.width && currentBottom <= containerRect.height) {
+                    let resizeCollision = false;
+
+                    // 檢查縮放後是否會與其他按鈕碰撞 (只檢查寬高是否重疊)
+                    const proposedRect = {
+                        x: initialConfig.x, // 拖曳時 X/Y 不變
+                        y: initialConfig.y,
+                        width: newWidth,
+                        height: newHeight
+                    };
+
+                    for (const otherConfig of buttonConfigs.value) {
+                        if (otherConfig.id === id) continue; 
+
+                        const otherRect = {
+                            x: otherConfig.x,
+                            y: otherConfig.y,
+                            width: otherConfig.width,
+                            height: otherConfig.height
+                        };
+
+                        if (checkCollision(proposedRect, otherRect)) {
+                            resizeCollision = true;
+                            break;
+                        }
+                    }
+
+
+                    // 僅在不超出容器邊界且沒有碰撞時更新尺寸
+                    if (currentRight <= containerRect.width && currentBottom <= containerRect.height && !resizeCollision) {
                          currentConfig.width = newWidth;
                          currentConfig.height = newHeight;
                     }
@@ -507,13 +712,38 @@
                 document.removeEventListener('touchmove', handleMove, { passive: false });
                 document.removeEventListener('touchend', handleEnd);
             }
+            
+            // --- 監聽狀態變化，確保 Lucide Icons 渲染正確 ---
+            watch(isEditing, (newValue) => {
+                if (newValue) {
+                    // 等待 DOM 更新，確保所有 v-if 條件下的圖示都被渲染
+                    nextTick(() => {
+                        lucide.createIcons();
+                    });
+                }
+            });
 
-            // --- 生命周期鉤子 (未變動) ---
+            // 【模式切換】手動監聽 isDarkMode 並操作 body class
+            watch(isDarkMode, (isDark) => {
+                if (isDark) {
+                    document.body.classList.add('dark-mode');
+                } else {
+                    document.body.classList.remove('dark-mode');
+                }
+            });
+
+
+            // --- 生命周期鉤子 (已更新) ---
             onMounted(() => {
                 loadConfigs();
+                // 初始化時手動設定 body class
+                if (isDarkMode.value) {
+                    document.body.classList.add('dark-mode');
+                }
+
                 // 初始化 Lucide Icons
                 lucide.createIcons();
-                // 模擬連線成功，實際應用中應有連線檢查邏輯
+                // 模擬連線成功
                 setTimeout(() => { isConnected.value = true; }, 1000); 
             });
 
@@ -523,6 +753,7 @@
                 editingConfig,
                 rpiIp,
                 isConnected,
+                isDarkMode, 
                 controlPad,
                 
                 // 方法
@@ -531,11 +762,12 @@
                 openEditor,
                 saveEditor,
                 sendMessage,
+                toggleDarkMode, 
                 
                 // 拖曳/縮放
                 startDrag,
                 startResize,
-                Math, // 暴露 Math 對象給模板使用
+                Math, 
             };
         }
     };

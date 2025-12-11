@@ -147,7 +147,11 @@
                         backgroundColor: config.colorHex ? '#' + config.colorHex : '#4b5563', /* 背景色 */
                         boxShadow: isEditing ? '0 0 10px rgba(255, 255, 0, 0.8)' : 'none'
                     }"
-                    @click="!isEditing && sendMessage(config.messageToSend)"
+                    
+                    @mousedown="!isEditing && sendMessage(config.messageToSendOnPress, '按下')"
+                    @mouseup="!isEditing && sendMessage(config.messageToSendOnRelease, '放開')"
+                    @touchstart.prevent="!isEditing && sendMessage(config.messageToSendOnPress, '按下')"
+                    @touchend="!isEditing && sendMessage(config.messageToSendOnRelease, '放開')"
                 >
                     <span 
                         :style="{ 
@@ -159,7 +163,6 @@
                         {{ config.label }}
                     </span>
 
-                    <!-- 編輯模式下顯示的 Resize 區塊 (右下角) -->
                     <div v-if="isEditing" 
                         class="absolute bottom-0 right-0 w-8 h-8 rounded-full bg-black/60 cursor-se-resize flex items-center justify-center text-yellow-400 hover:scale-110"
                         @mousedown.stop="startResize($event, config.id)"
@@ -168,10 +171,12 @@
                         <i data-lucide="maximize-2" class="icon w-4 h-4"></i>
                     </div>
                     
-                     <!-- 編輯模式下顯示的 Edit 區塊 (左上角) -->
                     <div v-if="isEditing" 
                         class="absolute top-0 left-0 w-8 h-8 rounded-full bg-black/60 cursor-pointer flex items-center justify-center text-blue-400 hover:scale-110"
-                        @click.stop="openEditor(config)"
+                        @mousedown.stop
+                        @mouseup.stop="openEditor(config)"
+                        @touchstart.stop
+                        @touchend.stop="openEditor(config)"
                     >
                         <i data-lucide="edit" class="icon w-4 h-4"></i>
                     </div>
@@ -198,8 +203,13 @@
                 <label class="block" :class="isDarkMode ? 'text-white/80' : 'text-gray-600'">按鈕文字</label>
                 <input type="text" v-model="editingConfig.label" class="w-full p-2 rounded-lg bg-white/10 border border-white/20 text-white focus:ring-blue-500 focus:border-blue-500" />
                 
-                <label class="block" :class="isDarkMode ? 'text-white/80' : 'text-gray-600'">發送指令</label>
-                <input type="text" v-model="editingConfig.messageToSend" class="w-full p-2 rounded-lg bg-white/10 border border-white/20 text-white focus:ring-blue-500 focus:border-blue-500" />
+                <!-- NEW: 按下發送指令 -->
+                <label class="block" :class="isDarkMode ? 'text-white/80' : 'text-gray-600'">**按下** 發送指令 (Press)</label>
+                <input type="text" v-model="editingConfig.messageToSendOnPress" class="w-full p-2 rounded-lg bg-white/10 border border-white/20 text-white focus:ring-blue-500 focus:border-blue-500" />
+                
+                <!-- NEW: 放開發送指令 -->
+                <label class="block" :class="isDarkMode ? 'text-white/80' : 'text-gray-600'">**放開** 發送指令 (Release)</label>
+                <input type="text" v-model="editingConfig.messageToSendOnRelease" class="w-full p-2 rounded-lg bg-white/10 border border-white/20 text-white focus:ring-blue-500 focus:border-blue-500" />
             </div>
 
             <div class="h-px bg-white/20 my-4"></div>
@@ -244,8 +254,10 @@
     const DEFAULT_CONFIG = {
         id: '',
         label: '新指令',
-        messageToSend: 'NEW',
-        colorHex: '7E57C2', // Deep Purple (將被 addButton 中的隨機色覆蓋)
+        // NEW: 分離按下和放開的指令
+        messageToSendOnPress: 'PRESS', 
+        messageToSendOnRelease: 'RELEASE', 
+        colorHex: '7E57C2', 
         x: 100, 
         y: 100,
         width: 120, 
@@ -340,7 +352,7 @@
 
             // 確保位置在容器內
             newX = Math.max(0, Math.min(newX, containerWidth - width));
-            newY = Math.max(0, Math.min(newY, containerHeight - height));
+            newY = Math.min(newY, containerHeight - height);
 
             if (!isColliding(newX, newY)) {
                 // 找到空位
@@ -360,7 +372,7 @@
             const buttonConfigs = ref([]);
             const isEditing = ref(false); // 編輯/控制模式切換
             const editingConfig = ref(null); // 當前正在編輯的按鈕
-            const rpiIp = ref('172.20.10.4'); // 樹莓派 IP (請替換為您的實際 IP)
+            const rpiIp = ref('raspberrypi.local'); // 樹莓派 IP (請替換為您的實際 IP)
             const isConnected = ref(false); // 模擬連線狀態
             const isDarkMode = ref(false); // 深色模式狀態
             
@@ -379,37 +391,40 @@
                 initialMouseY: 0, 
             });
 
-            // --- 資料持久化 (未變動) ---
+            // --- 資料持久化 ---
             const CONFIG_KEY = 'RpiControllerConfigs';
             const DARK_MODE_KEY = 'DarkModePreference'; 
 
             function loadConfigs() {
                 const saved = localStorage.getItem(CONFIG_KEY);
+                let loadedConfigs = [];
                 if (saved) {
                     try {
-                        buttonConfigs.value = JSON.parse(saved);
+                        loadedConfigs = JSON.parse(saved);
                     } catch (e) {
                         console.error("載入配置失敗，使用預設值:", e);
-                        buttonConfigs.value = [
-                            { ...DEFAULT_CONFIG, id: 'btn1', label: '燈光 ON', messageToSend: 'A', colorHex: '34C759', x: 80, y: 80 },
-                            { ...DEFAULT_CONFIG, id: 'btn2', label: '燈光 OFF', messageToSend: 'B', colorHex: 'FF3B30', x: 80, y: 160 },
-                            { ...DEFAULT_CONFIG, id: 'btn3', label: '模式切換', messageToSend: 'C', colorHex: '007AFF', x: 240, y: 80 },
-                        ];
                     }
-                } else {
-                     buttonConfigs.value = [
-                        { ...DEFAULT_CONFIG, id: 'btn1', label: '燈光 ON', messageToSend: 'A', colorHex: '34C759', x: 80, y: 80 },
-                        { ...DEFAULT_CONFIG, id: 'btn2', label: '燈光 OFF', messageToSend: 'B', colorHex: 'FF3B30', x: 80, y: 160 },
-                        { ...DEFAULT_CONFIG, id: 'btn3', label: '模式切換', messageToSend: 'C', colorHex: '007AFF', x: 240, y: 80 },
+                } 
+                
+                if (loadedConfigs.length === 0) {
+                     loadedConfigs = [
+                        // 更新預設按鈕配置以使用 Press/Release
+                        { ...DEFAULT_CONFIG, id: 'btn1', label: '燈光 ON (P)', messageToSendOnPress: 'A', messageToSendOnRelease: 'A_RELEASE', colorHex: '34C759', x: 80, y: 80 },
+                        { ...DEFAULT_CONFIG, id: 'btn2', label: '燈光 OFF (R)', messageToSendOnPress: 'B', messageToSendOnRelease: 'B_RELEASE', colorHex: 'FF3B30', x: 80, y: 160 },
+                        { ...DEFAULT_CONFIG, id: 'btn3', label: '模式切換 (P/R)', messageToSendOnPress: 'C_PRESS', messageToSendOnRelease: 'C_RELEASE', colorHex: '007AFF', x: 240, y: 80 },
                     ];
                 }
-                // 為了兼容，檢查並確保每個按鈕都有新的字體屬性
-                 buttonConfigs.value = buttonConfigs.value.map(config => ({
+                
+                // 為了兼容舊配置，確保每個按鈕都有 Press/Release 屬性
+                 buttonConfigs.value = loadedConfigs.map(config => ({
                     ...DEFAULT_CONFIG,
                     ...config,
                     id: config.id || crypto.randomUUID(),
                     fontSize: config.fontSize || DEFAULT_CONFIG.fontSize,
-                    fontColorHex: config.fontColorHex || DEFAULT_CONFIG.fontColorHex
+                    fontColorHex: config.fontColorHex || DEFAULT_CONFIG.fontColorHex,
+                    // 兼容舊版本（如果舊配置有 messageToSend 欄位，則用它初始化 Press）
+                    messageToSendOnPress: config.messageToSendOnPress || config.messageToSend || 'PRESS',
+                    messageToSendOnRelease: config.messageToSendOnRelease || 'RELEASE',
                 }));
                 
                 // 載入深色模式偏好
@@ -423,15 +438,16 @@
                 localStorage.setItem(CONFIG_KEY, JSON.stringify(buttonConfigs.value));
             }
             
-            // --- 深色模式切換邏輯 (未變動) ---
+            // --- 深色模式切換邏輯 ---
             function toggleDarkMode() {
                 isDarkMode.value = !isDarkMode.value;
                 localStorage.setItem(DARK_MODE_KEY, isDarkMode.value);
             }
 
-            // --- 樹莓派通訊邏輯 (HTTP) (未變動) ---
-            async function sendMessage(message) {
+            // --- 樹莓派通訊邏輯 (HTTP) (已更新：新增 actionType 參數) ---
+            async function sendMessage(message, actionType = 'CLICK') {
                 if (isEditing.value) return; 
+                if (!message) return; // 如果指令是空的則不發送
 
                 const url = `http://${rpiIp.value}:5000/command`; 
 
@@ -443,7 +459,7 @@
                     });
 
                     if (response.ok) {
-                        console.log(`指令 [${message}] 發送成功！`);
+                        console.log(`指令 [${message}] (${actionType}) 發送成功！`);
                     } else {
                         console.error(`發送失敗，RPI 返回狀態碼: ${response.status}`);
                     }
@@ -452,7 +468,7 @@
                 }
             }
             
-            // --- 按鈕操作 (已修復: 避免重疊與隨機顏色) ---
+            // --- 按鈕操作 ---
             function addButton() {
                 const newId = crypto.randomUUID();
                 
